@@ -224,6 +224,9 @@
         gap: 12px;
         margin: 12px 0 10px;
       }
+      .formula-grid.formula-grid-3x2 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
       .formula-card {
         background: linear-gradient(
           180deg,
@@ -328,6 +331,9 @@
         .two-col-text {
           grid-template-columns: 1fr;
         }
+        .formula-grid.formula-grid-3x2 {
+          grid-template-columns: 1fr;
+        }
         .plot,
         .plot.tall {
           height: 360px;
@@ -353,89 +359,13 @@
   <body>
     <div class="wrap">
       <h1>
-        TrasMuon Gate Diagnostics: How Column-Level Damping Responds to Energy
-        Bursts
+        TrasMuon Trust-region Diagnostics: How Column-Level Damping Responds to
+        Energy Bursts
       </h1>
-      <div class="section-intro">
-        <p>
-          TrasMuon augms Muon-family optimizers with a column-level energy gate
-          that detects and damps anomalous gradient concentrations before
-          Newton-Schulz orthogonalization mixes the update. At each gating step,
-          the per-column energy ratio $r_j = E_j / (E_{\mathrm{ref}} +
-          \epsilon)$ measures how much each column's energy deviates from a
-          smoothed reference. Columns exceeding a threshold are damped by a
-          log-hinge gate $c_j = \mathrm{clip}\bigl(1/(1 + \alpha \log(1+r_j)),
-          c_{\min}, 1\bigr)$, which is strictly damping-only $(c_j \leq 1)$. The
-          applied gate is temporally smoothed via EMA and schedule-free
-          blending: $c_{\mathrm{used}} = (1-\rho),c_{\mathrm{ema}} +
-          \rho,c_{\mathrm{avg}}$.
-        </p>
-
-        <p>
-          The following diagnostic quantities are tracked per layer per step:
-        </p>
-
-        <ul>
-          <li>
-            <strong>active_rate</strong>: fraction of columns whose energy ratio
-            exceeds the trigger threshold ($r_j > k$). Rising active_rate
-            signals that the gate has detected an energy burst.
-          </li>
-          <li>
-            <strong>damp_rate</strong>: fraction of columns with any measurable
-            damping ($c_j < 1$). A superset of active_rate; captures columns
-            damped even mildly.
-          </li>
-          <li>
-            <strong>floor_rate</strong>: fraction of columns at maximum damping
-            ($cj = c{\min}$). High floor_rate indicates a strong burst
-            saturating the gate.
-          </li>
-          <li>
-            <strong>c_used_mean</strong>: mean applied gate coefficient across
-            all columns. Values near 1.0 indicate the gate is nearly dormant
-            (stationary regime); lower values indicate active damping.
-          </li>
-          <li>
-            <strong>r_ratio</strong>: ratio of max to 95th-percentile energy
-            ratio ($r{\max} / r{q95}$). Measures how localized the energy
-            concentration is; high values indicate a small number of outlier
-            columns.
-          </li>
-        </ul>
-
-        <p>
-          <strong>How to read the plots.</strong> In stationary regimes, all
-          rates remain near zero and c_used_mean stays close to 1 — the gate
-          imposes no overhead. When a burst event occurs (e.g., ROI shift in
-          PINNs, or gradient outlier in LM training), r_ratio spikes first,
-          followed by rising active_rate and damp_rate, and a corresponding drop
-          in c_used_mean. This closed-loop response — detect → damp → recover —
-          is the core mechanism by which TrasMuon suppresses loss spikes without
-          interfering with normal optimization.
-        </p>
-      </div>
 
       <section class="section" data-section="qwen">
         <div class="card">
-          <h2>Qwen-3 0.6B scenario</h2>
-          <div class="mechanism-callout">
-            <div class="title">
-              TrasMuon Gate Diagnostics: How Column-Level Damping Responds to
-              Energy Bursts
-            </div>
-            <div class="body">
-              Anisotropic gradient bursts raise the high-quantile relative
-              energy \(r_{q95}\), trigger column-wise damping through \(c_j\),
-              and stabilize optimization before loss spikes propagate.
-            </div>
-          </div>
-          <p class="section-intro">
-            The diagnostics below follow the TrasMuon framing: first measure
-            burst intensity in the gradient field, then inspect how gate
-            activity responds, and finally connect that response to macroscopic
-            training stability.
-          </p>
+          <h2>Qwen-3 0.6B: Column-Level Damping Responds to Energy Bursts</h2>
           <div class="metrics">
             <div class="metric">
               <div class="label">Training loss drop</div>
@@ -462,56 +392,75 @@
             <div class="card">
               <h3>Training loss and gradient norm</h3>
               <div id="qwen-loss-grad" class="plot tall"></div>
-              <p class="section-intro">
-                Shows the training loss trajectory and gradient norm bursts,
-                illustrating how TrasMuon detects and responds to anisotropic
-                gradient spikes through adaptive column-wise damping.
-              </p>
             </div>
           </div>
           <div class="grid-1" style="margin-top: 16px">
             <div class="card">
-              <h3>r_q95, floor_rate, active_rate</h3>
+              <h3>r_q95, floor rate, active rate</h3>
               <div id="qwen-gate" class="plot tall"></div>
-              <div class="formula-grid">
+                <div class="formula-grid formula-grid-3x2">
                 <div class="formula-card">
                   <div class="formula-label">Relative energy</div>
                   <div class="formula-eq">
-                    \[ r_j = \frac{\|g_j\|}{\operatorname{median}_k \|g_k\|} \]
+                  \[ r_{t,j} = \frac{E_{t,j}}{E_{t}^{\text{ref}} + \epsilon}
+                  \]
                   </div>
                   <div class="formula-desc">
-                    Column-wise energy normalized by the median column energy.
-                  </div>
-                </div>
-                <div class="formula-card">
-                  <div class="formula-label">High-quantile burst score</div>
-                  <div class="formula-eq">
-                    \[ r_{q95} = \operatorname{Quantile}_{0.95}(\{r_j\}) \]
-                  </div>
-                  <div class="formula-desc">
-                    Tracks the tail of the anisotropy distribution.
+                  Per-column energy ratio measuring deviation from smoothed
+                  reference.
                   </div>
                 </div>
                 <div class="formula-card">
                   <div class="formula-label">Active rate</div>
                   <div class="formula-eq">
-                    \[ \operatorname{active\_rate} = \frac{1}{d}\sum_{j=1}^{d}
-                    \mathbf{1}[c_j &gt; c_{\min}] \]
+                  \[ \operatorname{active\ rate} = \frac{1}{d}\sum_{j=1}^{d}
+                  \mathbf{1}[r_j > k] \]
                   </div>
                   <div class="formula-desc">
-                    Fraction of columns not clamped to the minimum gate.
+                  Fraction of columns whose energy ratio exceeds the trigger
+                  threshold. Rising active rate signals energy burst detection.
+                  </div>
+                </div>
+                <div class="formula-card">
+                  <div class="formula-label">Damp rate</div>
+                  <div class="formula-eq">
+                  \[ \operatorname{damp\ rate} = \frac{1}{d}\sum_{j=1}^{d}
+                  \mathbf{1}[c_j < 1] \]
+                  </div>
+                  <div class="formula-desc">
+                  Fraction of columns with any measurable damping. Superset of
+                  active rate.
                   </div>
                 </div>
                 <div class="formula-card">
                   <div class="formula-label">Floor rate</div>
                   <div class="formula-eq">
-                    \[ \operatorname{floor\_rate} = \frac{\sum_j \mathbf{1}[c_j
-                    \le c_{\min}]\,\mathbf{1}[c_j &gt; 0]} {\sum_j
-                    \mathbf{1}[c_j &gt; 0]} \]
+                  \[ \operatorname{floor\ rate} = \frac{1}{d}\sum_{j=1}^{d}
+                  \mathbf{1}[c_j = c_{\min}] \]
                   </div>
                   <div class="formula-desc">
-                    Among active columns, the share already saturated at the
-                    floor.
+                  Fraction of columns at maximum damping. High values indicate
+                  strong burst saturating the gate.
+                  </div>
+                </div>
+                <div class="formula-card">
+                  <div class="formula-label">Mean gate coefficient</div>
+                  <div class="formula-eq">
+                  \[ c_{\text{mean}} = \frac{1}{d}\sum_{j=1}^{d} c_j \]
+                  </div>
+                  <div class="formula-desc">
+                  Mean applied gate across all columns. Values near 1.0 indicate
+                  dormant gate; lower values indicate active damping.
+                  </div>
+                </div>
+                <div class="formula-card">
+                  <div class="formula-label">Energy ratio range</div>
+                  <div class="formula-eq">
+                  \[ r_{\mathrm{ratio}} = \frac{r_{\max}}{r_{q95}} \]
+                  </div>
+                  <div class="formula-desc">
+                  Ratio of max to 95th-percentile energy ratio. High values
+                  indicate localized energy concentration in few columns.
                   </div>
                 </div>
               </div>
@@ -519,16 +468,16 @@
           </div>
           <div class="grid-1" style="margin-top: 16px">
             <div class="card">
-              <h3>c_mean vs floor_rate</h3>
+              <h3>c_mean vs floor rate</h3>
               <div id="qwen-cmean" class="plot"></div>
               <div class="formula-grid">
                 <div class="formula-card">
-                  <div class="formula-label">Mean gate value</div>
+                  <div class="formula-label">Mean gate coefficient</div>
                   <div class="formula-eq">
-                    \[ c_{\text{mean}} = \frac{1}{d}\sum_{j=1}^{d} c_j \]
+                  \[ c_{\text{used}} = (1-\rho) c_{\mathrm{ema}} + \rho c_{\mathrm{avg}} \]
                   </div>
                   <div class="formula-desc">
-                    Global damping level across all gated columns.
+                  Mean applied gate coefficient across all columns. Values near 1.0 indicate the gate is nearly dormant (stationary regime); lower values indicate active damping.
                   </div>
                 </div>
               </div>
@@ -539,8 +488,8 @@
 
       <section class="section" data-section="pinn">
         <div class="card">
-          <h2>PINN closed-loop zoom (k=2)</h2>
-          <div class="mechanism-callout">
+          <h2>PINN: Column-Level Damping Responds to Energy Bursts</h2>
+          <!-- <div class="mechanism-callout">
             <div class="title">Mechanistic hypothesis</div>
             <div class="body">
               Closed-loop PINN training exhibits heavy-tail gradient anisotropy;
@@ -553,7 +502,7 @@
             This panel compares optimization outcome and gate dynamics side by
             side so the reduction in loss can be interpreted through the paper's
             burst-suppression mechanism rather than as a purely empirical win.
-          </p>
+          </p> -->
           <div class="metrics">
             <div class="metric">
               <div class="label">TrasMuon mean loss</div>
@@ -561,7 +510,7 @@
               <div class="sub">vs Muon 1.191</div>
             </div>
             <div class="metric">
-              <div class="label">Steps where Tras loss &lt; Muon</div>
+                <div class="label">Steps with TrasMuon advantage</div>
               <div class="value">66.1%</div>
               <div class="sub">window 1000–1500</div>
             </div>
@@ -580,61 +529,28 @@
             <div class="card">
               <h3>Loss: TrasMuon vs Muon</h3>
               <div id="pinn-loss" class="plot"></div>
-              <p class="section-intro">
+              <!-- <p class="section-intro">
                 TrasMuon's adaptive damping reduces optimization loss compared
                 to standard Muon, validating the burst-suppression mechanism.
-              </p>
+              </p> -->
             </div>
             <div class="card">
               <h3>relL2 comparison</h3>
               <div id="pinn-rell2" class="plot"></div>
-              <p class="section-intro">
+              <!-- <p class="section-intro">
                 Relative L2 error between TrasMuon and Muon, demonstrating
                 improved prediction accuracy through gradient modulation.
-              </p>
+              </p> -->
             </div>
           </div>
           <div class="grid-2" style="margin-top: 16px">
             <div class="card">
               <h3>Relative-energy statistics</h3>
               <div id="pinn-rstats" class="plot"></div>
-              <div class="formula-grid">
-                <div class="formula-card">
-                  <div class="formula-label">Tail-to-median ratio</div>
-                  <div class="formula-eq">
-                    \[ r_{\mathrm{ratio}} = \frac{r_{q95}}{r_{q50}} \]
-                  </div>
-                  <div class="formula-desc">
-                    Compact summary of heavy-tail burst severity.
-                  </div>
-                </div>
-              </div>
             </div>
             <div class="card">
               <h3>Damping and floor activity</h3>
               <div id="pinn-gate" class="plot"></div>
-              <div class="formula-grid">
-                <div class="formula-card">
-                  <div class="formula-label">Gradient modulation</div>
-                  <div class="formula-eq">
-                    \[ \tilde{g}_j = c_j \cdot g_j \]
-                  </div>
-                  <div class="formula-desc">
-                    TrasMuon rescales each column gradient before the optimizer
-                    update.
-                  </div>
-                </div>
-                <div class="formula-card">
-                  <div class="formula-label">Gate rule</div>
-                  <div class="formula-eq">
-                    \[ c_j = \operatorname{clip}(f(r_j), c_{\min}, 1) \]
-                  </div>
-                  <div class="formula-desc">
-                    Columns with larger relative energy receive stronger
-                    damping.
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -8296,7 +8212,7 @@
               x: pinn.step,
               y: pinn.r_ratio,
               mode: "lines",
-              name: "r_ratio",
+              name: "r ratio",
               line: { dash: "dot" },
             },
           ],
@@ -8320,19 +8236,19 @@
               x: pinn.step,
               y: pinn.damp_rate,
               mode: "lines",
-              name: "damp_rate",
+              name: "damp rate",
             },
             {
               x: pinn.step,
               y: pinn.floor_rate_used,
               mode: "lines",
-              name: "floor_rate_used",
+              name: "floor rate used",
             },
             {
               x: pinn.step,
               y: pinn.floor_rate_gate,
               mode: "lines",
-              name: "floor_rate_gate",
+              name: "floor rate gate",
               line: { dash: "dot" },
             },
           ],
@@ -8388,14 +8304,14 @@
               x: qwen.step,
               y: qwen.floor_rate,
               mode: "lines",
-              name: "floor_rate",
+              name: "floor rate",
               yaxis: "y2",
             },
             {
               x: qwen.step,
               y: qwen.active_rate,
               mode: "lines",
-              name: "active_rate",
+              name: "active rate",
               yaxis: "y2",
               line: { dash: "dot" },
             },
@@ -8406,11 +8322,11 @@
       }
 
       {
-        let layout = baseLayout("", "c_mean / floor_rate");
+        let layout = baseLayout("", "c_mean / floor rate");
         verticalBands(layout, burstWindows, "rgba(141,208,160,0.10)");
         layout.yaxis.range = [Math.min(...qwen.c_mean) - 0.00005, 1.00002];
         layout.yaxis2 = {
-          title: "floor_rate",
+          title: "floor rate",
           overlaying: "y",
           side: "right",
           range: [0, 1.02],
@@ -8425,7 +8341,7 @@
               x: qwen.step,
               y: qwen.floor_rate,
               mode: "lines",
-              name: "floor_rate",
+              name: "floor rate",
               yaxis: "y2",
             },
           ],
